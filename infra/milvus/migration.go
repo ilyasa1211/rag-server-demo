@@ -1,4 +1,4 @@
-package migrations
+package milvus
 
 import (
 	"context"
@@ -10,6 +10,12 @@ import (
 
 type MilvusMigration struct {
 	client *milvusclient.Client
+}
+
+func NewMilvusMigration(client *milvusclient.Client) *MilvusMigration {
+	return &MilvusMigration{
+		client: client,
+	}
 }
 
 func (m *MilvusMigration) Run(ctx context.Context) error {

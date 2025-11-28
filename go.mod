@@ -2,7 +2,10 @@ module github.com/ilyasa1211/rag-server
 
 go 1.25.3
 
-require github.com/milvus-io/milvus-sdk-go v1.1.1
+require (
+	github.com/milvus-io/milvus/client/v2 v2.6.1
+	github.com/tmc/langchaingo v0.1.14
+)
 
 require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
@@ -49,8 +52,6 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 // indirect
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.6.3 // indirect
-	github.com/milvus-io/milvus-sdk-go/v2 v2.4.2 // indirect
-	github.com/milvus-io/milvus/client/v2 v2.6.1 // indirect
 	github.com/milvus-io/milvus/pkg/v2 v2.6.3 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.0 // indirect
@@ -86,7 +87,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
-	github.com/tmc/langchaingo v0.1.14 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
@@ -109,7 +109,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.36.0 // indirect
 	go.opentelemetry.io/otel/trace v1.36.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.0.0 // indirect
-	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/automaxprocs v1.5.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect

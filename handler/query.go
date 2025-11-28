@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -67,7 +68,19 @@ func (h QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	vector, err := h.embedder.EmbedQuery(ctx, req.Query)
 
 	if err != nil {
-		http.Error(w, "Failed to embed query", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to embed query %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	loadTask, err := h.vectorClient.LoadCollection(ctx, milvusclient.NewLoadCollectionOption("documents"))
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to load collection: %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	if err = loadTask.Await(ctx); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to load collection: %s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
@@ -77,26 +90,16 @@ func (h QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		http.Error(w, "Failed to search documents", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to search documents: %s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
 	res := []string{}
 
 	for _, r := range result {
-		s := struct {
-			Id       int64  `json:"id"`
-			Metadata string `json:"metadata"`
-		}{}
+		data := r.GetColumn("metadata").FieldData().GetScalars().GetStringData().Data
 
-		err := r.Unmarshal(&s)
-
-		if err != nil {
-			http.Error(w, "Failed to unmarshal search result", http.StatusInternalServerError)
-			break
-		}
-
-		res = append(res, s.Metadata)
+		res = append(res, data...)
 	}
 
 	promptTemp := prompts.NewPromptTemplate(promptTemplate, []string{"Context", "Question"})
@@ -107,7 +110,7 @@ func (h QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		http.Error(w, "Failed to format prompt", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to format prompt: %s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
@@ -116,18 +119,11 @@ func (h QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		http.Error(w, "Failed to generate response", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to generate response %s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
-	b, err := json.Marshal(llmResponse)
-
-	if err != nil {
-		http.Error(w, "Failed to marshal response", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	w.Write(b)
+	w.Write([]byte(llmResponse.Choices[0].Content))
 }
