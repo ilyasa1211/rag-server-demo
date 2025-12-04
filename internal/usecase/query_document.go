@@ -1,7 +1,7 @@
-package handler
+package usecase
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -32,56 +32,43 @@ type TemplateData struct {
 	Question string
 }
 
-type QueryRequest struct {
-	// Text
-	Query string `json:"query"`
+type QueryDocument struct {
+	Query string
 }
 
-type QueryResponse struct {
-	Data []string `json:"result"`
+type QueryDocumentResult struct {
+	Contents []string
 }
 
-type QueryHandler struct {
+type QueryDocumentHandler struct {
 	vectorClient *milvusclient.Client
 	embedder     *embeddings.EmbedderImpl
 	llm          *openai.LLM
 }
 
-func NewQueryHandler(client *milvusclient.Client, embedder *embeddings.EmbedderImpl, llm *openai.LLM) *QueryHandler {
-	return &QueryHandler{
+func NewQueryDocumentHandler(client *milvusclient.Client, embedder *embeddings.EmbedderImpl, llm *openai.LLM) QueryDocumentHandler {
+	return QueryDocumentHandler{
 		vectorClient: client,
 		embedder:     embedder,
 		llm:          llm,
 	}
 }
 
-func (h QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
-	var req QueryRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	ctx := r.Context()
-
-	vector, err := h.embedder.EmbedQuery(ctx, req.Query)
+func (h QueryDocumentHandler) Handle(ctx context.Context, q QueryDocument) (*ErrorWithStatusCode, QueryDocumentResult) {
+	vector, err := h.embedder.EmbedQuery(ctx, q.Query)
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to embed query %s", err.Error()), http.StatusInternalServerError)
-		return
+		return NewErrorWithStatusCode(fmt.Errorf("failed to embed query %w", err), http.StatusInternalServerError), QueryDocumentResult{}
 	}
 
 	loadTask, err := h.vectorClient.LoadCollection(ctx, milvusclient.NewLoadCollectionOption("documents"))
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to load collection: %s", err.Error()), http.StatusInternalServerError)
-		return
+		return NewErrorWithStatusCode(fmt.Errorf("failed to load collection: %w", err), http.StatusInternalServerError), QueryDocumentResult{}
 	}
 
 	if err = loadTask.Await(ctx); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to load collection: %s", err.Error()), http.StatusInternalServerError)
-		return
+		return NewErrorWithStatusCode(fmt.Errorf("failed to load collection: %s", err), http.StatusInternalServerError), QueryDocumentResult{}
 	}
 
 	result, err := h.vectorClient.Search(ctx, milvusclient.NewSearchOption("documents", 3, []entity.Vector{
@@ -90,28 +77,26 @@ func (h QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to search documents: %s", err.Error()), http.StatusInternalServerError)
-		return
+		return NewErrorWithStatusCode(fmt.Errorf("failed to search documents: %s", err), http.StatusInternalServerError), QueryDocumentResult{}
 	}
 
 	res := []string{}
 
-	for _, r := range result {
-		data := r.GetColumn("metadata").FieldData().GetScalars().GetStringData().Data
-
-		res = append(res, data...)
+	for i, r := range result {
+		if col, err := r.GetColumn("metadata").GetAsString(i); err == nil {
+			res = append(res, col)
+		}
 	}
 
 	promptTemp := prompts.NewPromptTemplate(promptTemplate, []string{"Context", "Question"})
 
 	prompt, err := promptTemp.Format(map[string]any{
 		"Context":  strings.Join(res, "\n"),
-		"Question": req.Query,
+		"Question": q.Query,
 	})
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to format prompt: %s", err.Error()), http.StatusInternalServerError)
-		return
+		return NewErrorWithStatusCode(fmt.Errorf("failed to format prompt: %w", err), http.StatusInternalServerError), QueryDocumentResult{}
 	}
 
 	llmResponse, err := h.llm.GenerateContent(ctx, []llms.MessageContent{
@@ -119,11 +104,16 @@ func (h QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to generate response %s", err.Error()), http.StatusInternalServerError)
-		return
+		return NewErrorWithStatusCode(fmt.Errorf("failed to generate response %w", err), http.StatusInternalServerError), QueryDocumentResult{}
 	}
 
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(llmResponse.Choices[0].Content))
+	r := QueryDocumentResult{
+		Contents: []string{},
+	}
+
+	for _, choice := range llmResponse.Choices {
+		r.Contents = append(r.Contents, choice.Content)
+	}
+
+	return nil, r
 }

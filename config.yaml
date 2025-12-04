@@ -1,0 +1,18 @@
+app:
+  listen: :8080
+
+milvus:
+  address: localhost:19530
+  apiKey: root:Milvus
+
+openai:
+  baseUrl: http://localhost:11434/v1 # Ollama
+  token: token
+  model: gemma3:1b-it-qat
+
+embedding:
+  baseUrl: http://localhost:11434/v1 # Ollama
+  token: token
+  model: embeddinggemma:latest
+  dimension: 768
+

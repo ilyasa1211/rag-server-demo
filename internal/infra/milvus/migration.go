@@ -23,8 +23,13 @@ func (m *MilvusMigration) Run(ctx context.Context) error {
 	colName := "documents"
 	schema := entity.NewSchema().WithDynamicFieldEnabled(true)
 
-	schema.WithField(entity.NewField().WithName("id").
-		WithIsAutoID(false).WithDataType(entity.FieldTypeInt64).WithIsPrimaryKey(true))
+	schema.WithField(
+		entity.NewField().
+			WithName("id").
+			WithIsAutoID(true).
+			WithDataType(entity.FieldTypeInt64).
+			WithIsPrimaryKey(true),
+	)
 
 	schema.WithField(
 		entity.NewField().

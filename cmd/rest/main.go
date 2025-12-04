@@ -3,15 +3,13 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
-	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/ilyasa1211/rag-server/handler"
-	"github.com/ilyasa1211/rag-server/infra/milvus"
+	"github.com/ilyasa1211/rag-server/internal/infra/configloader"
+	"github.com/ilyasa1211/rag-server/internal/infra/milvus"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/llms/openai"
@@ -19,19 +17,26 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
+		log.Printf("Error: %v\n", err)
 	}
 }
 
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
+	config, err := configloader.NewViperConfig("config.yaml")
+
+	if err != nil {
+		return err
+	}
+
 	defer stop()
 	// Initialize LLM
+
 	llm, err := openai.New(
-		openai.WithBaseURL("http://localhost:11434/v1"), // ollama
-		openai.WithToken("token"),
-		openai.WithModel("gemma3:1b-it-qat"),
+		openai.WithBaseURL(config.OpenAI.BaseURL),
+		openai.WithToken(config.OpenAI.Token),
+		openai.WithModel(config.OpenAI.Model),
 	)
 
 	if err != nil {
@@ -39,10 +44,10 @@ func run() error {
 	}
 
 	embeddingModel, err := openai.New(
-		openai.WithBaseURL("http://localhost:11434/v1"), // ollama
-		openai.WithToken("token"),
-		openai.WithEmbeddingModel("embeddinggemma:latest"),
-		openai.WithEmbeddingDimensions(768),
+		openai.WithBaseURL(config.Embedding.BaseURL),
+		openai.WithToken(config.Embedding.Token),
+		openai.WithEmbeddingModel(config.Embedding.Model),
+		openai.WithEmbeddingDimensions(config.Embedding.Dimension),
 	)
 
 	if err != nil {
@@ -54,7 +59,7 @@ func run() error {
 		return err
 	}
 
-	flagAddr := flag.String("listen", ":8080", "Listen Address")
+	flagAddr := flag.String("listen", config.App.Listen, "Listen Address")
 
 	flag.Parse()
 
@@ -70,8 +75,8 @@ func run() error {
 
 		log.Println("Connecting to milvus database...")
 		vectorClient, err := milvusclient.New(vectorDbTimeoutCtx, &milvusclient.ClientConfig{
-			Address: "localhost:19530",
-			// APIKey:  "root:Milvus",
+			Address: config.Milvus.Address,
+			APIKey:  config.Milvus.ApiKey,
 		})
 
 		vectorDbConnResultChan <- struct {
@@ -132,15 +137,4 @@ func run() error {
 	log.Println("Server shutdown complete")
 
 	return nil
-}
-
-func newHttpServer(addr string, client *milvusclient.Client, llm *openai.LLM, embedder *embeddings.EmbedderImpl) *http.Server {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /add", handler.NewAddHandler(client, embedder).Handle)
-	mux.HandleFunc("POST /query", handler.NewQueryHandler(client, embedder, llm).Handle)
-
-	return &http.Server{
-		Addr:    addr,
-		Handler: mux,
-	}
 }

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployment
+  namespace: app-namespace
+spec:
+  serviceAccount: app-service-account
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      containers:
+        - name: rag-server
+          image: localhost:5000/rag-server-demo:latest
+          args:
+            - -listen=:8080
+          ports:
+            - containerPort: 8080
